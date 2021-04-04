@@ -2,19 +2,12 @@
 # bin/compile <build-dir> <cache-dir> <env-dir>
 set -e
 
-# Used to format the output based on heroku guidelines
-# https://devcenter.heroku.com/articles/buildpack-api#style
-indent() {
-  RE="s/^/       /"
-  sed $SED_FLAG "$RE"
-}
-
 BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
 
 # Default Hugo version
-DEFAULT_HUGO_VERSION="0.26"
+DEFAULT_HUGO_VERSION="0.81.0"
 
 # attempt to extract the HUGO_VERSION parameter form the Heroku configuration vars, fall back to the default version if unavailable
 if [ -d "$ENV_DIR" -a -e "$ENV_DIR/HUGO_VERSION" ]; then
@@ -25,22 +18,29 @@ else
 fi
 
 # Hugo URL ( download from GH builds )
-RELEASE_NAME=hugo_${HUGO_VERSION}_Linux-64bit
+RELEASE_NAME=hugo_extended_${HUGO_VERSION}_Linux-64bit
 FILE_NAME=${RELEASE_NAME}.tar.gz
-HUGO_PACKAGE=https://github.com/spf13/hugo/releases/download/v${HUGO_VERSION}/${FILE_NAME}
+HUGO_PACKAGE=https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/${FILE_NAME}
 
 # Store the hugo package in the cache_dir ( persistent across builds )
 mkdir -p $CACHE_DIR
 if ! [ -e $CACHE_DIR/$FILE_NAME ]; then
   echo "\n-----> Fetching Hugo ${HUGO_VERSION} binaries at ${HUGO_PACKAGE}"
-  curl $HUGO_PACKAGE -L -s -o $CACHE_DIR/$FILE_NAME | indent
+  curl $HUGO_PACKAGE -L -s -o $CACHE_DIR/$FILE_NAME
 fi
 
 # Extract the binary in the working directory
 echo "\n-----> Extracting Hugo ${HUGO_VERSION} binaries to ${BUILD_DIR}"
-mkdir -p $CACHE_DIR/$RELEASE_NAME | indent
-tar -zxvf $CACHE_DIR/$FILE_NAME -C $CACHE_DIR | indent
-mv $CACHE_DIR/hugo $BUILD_DIR/hugo | indent
+mkdir -p $CACHE_DIR/$RELEASE_NAME
+tar -zxvf $CACHE_DIR/$FILE_NAME -C $CACHE_DIR
+mv $CACHE_DIR/hugo $BUILD_DIR/hugo
+
+# if the user has a script/pre-build script, run that
+PRE_BUILD_SCRIPT="$BUILD_DIR/script/pre-build"
+if [ -x "$PRE_BUILD_SCRIPT" ]; then
+  echo "\n-----> Running pre-build script: $PRE_BUILD_SCRIPT"
+  $PRE_BUILD_SCRIPT "$BUILD_DIR"
+fi
 
 # Fetch a theme specified in the .hugotheme file
 if [ -e $BUILD_DIR/.hugotheme ]; then
@@ -53,5 +53,5 @@ fi
 # Build the site
 echo "\n-----> Building the site"
 cd $BUILD_DIR
-mkdir -p static | indent
-./hugo | indent
+mkdir -p static
+./hugo
